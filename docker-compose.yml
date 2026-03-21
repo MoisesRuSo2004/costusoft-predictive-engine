@@ -1,0 +1,93 @@
+version: "3.9"
+
+# ================================================================
+# Docker Compose — inventario completo
+# Levanta los 3 servicios juntos para desarrollo local:
+#   - postgres:     base de datos compartida
+#   - inventario-api: Spring Boot (puerto 8080)
+#   - prediccion:   FastAPI Python (puerto 8001)
+#
+# Uso:
+#   docker-compose up --build
+#   docker-compose up -d          (en background)
+#   docker-compose logs -f prediccion  (ver logs del servicio Python)
+# ================================================================
+
+services:
+  # ── PostgreSQL ──────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventario-postgres
+    environment:
+      POSTGRES_DB: inventario_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inventario-net
+
+  # ── Spring Boot API ─────────────────────────────────────────────
+  inventario-api:
+    build:
+      context: ./inventario-api
+      dockerfile: Dockerfile
+    container_name: inventario-api
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: dev
+      DATABASE_URL: jdbc:postgresql://postgres:5432/inventario_db
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: postgres
+      JWT_SECRET: dGhpcy1pcy1hLXZlcnktbG9uZy1zZWNyZXQta2V5LWZvci1kZXZlbG9wbWVudC1vbmx5LTEyMzQ1Njc4OTAxMjM0NTY=
+      # URL del microservicio Python (resolucion por nombre de servicio Docker)
+      PREDICCION_SERVICE_URL: http://prediccion:8001
+      PREDICCION_SERVICE_TOKEN: mi-token-secreto-interno-cambiar-en-produccion
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inventario-net
+
+  # ── Microservicio Python de prediccion ──────────────────────────
+  prediccion:
+    build:
+      context: ./prediccion-service
+      dockerfile: Dockerfile
+    container_name: inventario-prediccion
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/inventario_db
+      PORT: 8001
+      API_SECRET_TOKEN: mi-token-secreto-interno-cambiar-en-produccion
+      ENVIRONMENT: development
+    volumes:
+      # Persistir modelos entrenados entre reinicios
+      - prediccion_models:/app/models
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inventario-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+  prediccion_models:
+
+networks:
+  inventario-net:
+    driver: bridge

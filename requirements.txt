@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pandas
+numpy
+prophet
+xgboost
+scikit-learn
+psycopg2-binary
+python-dotenv
+apscheduler
