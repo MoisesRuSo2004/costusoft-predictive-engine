@@ -1,14 +1,14 @@
 COPYRIGHT (C) 2026 COSTUSOFT - PROPIEDAD INTELECTUAL DE ALGORITMOS
 
-Queda prohibida la copia, distribución o uso no autorizado de los modelos 
-predictivos y la lógica de extracción de características (features) 
+Queda prohibida la copia, distribución o uso no autorizado de los modelos
+predictivos y la lógica de extracción de características (features)
 contenida en este repositorio.
 
-Este microservicio utiliza Prophet y XGBoost bajo sus respectivas licencias 
-de código abierto, pero la implementación específica, el flujo de 
-reentrenamiento automático y la configuración de hiperparámetros para 
+Este microservicio utiliza Prophet y XGBoost bajo sus respectivas licencias
+de código abierto, pero la implementación específica, el flujo de
+reentrenamiento automático y la configuración de hiperparámetros para
 inventarios textiles son propiedad exclusiva de COSTUSOFT.
 
-El acceso no autorizado a los endpoints de predicción o la manipulación 
-del archivo de persistencia de modelos (xgboost_riesgo.joblib) será 
+El acceso no autorizado a los endpoints de predicción o la manipulación
+del archivo de persistencia de modelos (xgboost_riesgo.joblib) será
 considerado una violación de los términos de servicio.
