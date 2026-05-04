@@ -9,3 +9,5 @@ psycopg2-binary
 python-dotenv
 apscheduler
 pydantic-settings
+sqlalchemy
+joblib
