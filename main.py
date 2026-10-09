@@ -1,5 +1,4 @@
-from fastapi import FastAPI, HTTPException, Depends, Security
-from fastapi.security import APIKeyHeader
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 import logging
@@ -9,6 +8,8 @@ import pandas as pd
 from datetime import date, timedelta
 
 from config import settings
+from mineria.rutas import router as router_mineria
+from seguridad import verificar_token
 from database import (
     obtener_historial_insumo,
     obtener_stock_actual,
@@ -51,13 +52,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ── Seguridad: token interno ─────────────────────────────────────────────────
-api_key_header = APIKeyHeader(name="X-API-Token", auto_error=False)
-
-def verificar_token(token: str = Security(api_key_header)):
-    if token != settings.API_SECRET_TOKEN:
-        raise HTTPException(status_code=403, detail="Token invalido")
-    return token
+# ── Modulo de mineria de datos (/mineria/*) ──────────────────────────────────
+app.include_router(router_mineria)
 
 # ── Scheduler para reentrenamiento automatico ─────────────────────────────────
 scheduler = BackgroundScheduler()
