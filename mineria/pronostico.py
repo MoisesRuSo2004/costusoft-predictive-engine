@@ -96,8 +96,8 @@ def _modelo_estacional(meses: pd.DataFrame, cantidad: int) -> pd.DataFrame:
 
 MODELOS = {
     "prophet": (_modelo_prophet, "Prophet: tendencia y estacionalidad anual"),
-    "promedio_12m": (_modelo_promedio, "Promedio de los ultimos 12 meses"),
-    "estacional": (_modelo_estacional, "Promedio del mismo mes en los ultimos 3 anios"),
+    "promedio_12m": (_modelo_promedio, "Promedio de los últimos 12 meses"),
+    "estacional": (_modelo_estacional, "Promedio del mismo mes en los últimos 3 años"),
 }
 
 
@@ -119,14 +119,20 @@ def _evaluar(real: np.ndarray, predicho: np.ndarray) -> tuple[float, Optional[fl
     return float(absolutos.mean()), wape
 
 
-def _interpretar(wape: Optional[float]) -> str:
+def _interpretar(wape: Optional[float], error_total: Optional[float]) -> str:
+    """
+    Lectura para el usuario. Para comprar importa acertar el TOTAL del periodo:
+    un insumo puede variar mucho mes a mes y aun asi sumar lo esperado.
+    """
     if wape is None:
-        return "Sin consumo en los meses evaluados: no se puede medir el error porcentual."
+        return "Sin consumo en los meses evaluados: no se puede medir el error."
     if wape <= 20:
-        return "Muy buena: se equivoco menos del 20 % del consumo real."
+        return "Muy buena: se equivocó menos del 20 % del consumo real."
     if wape <= 40:
-        return "Aceptable: util para planear, con margen de error moderado."
-    return "Baja: el consumo de este insumo es muy irregular de un mes a otro."
+        return "Aceptable: útil para planear, con margen de error moderado."
+    if error_total is not None and error_total <= 20:
+        return "Útil para comprar: mes a mes varía mucho, pero acierta el total del periodo."
+    return "Baja: el consumo de este insumo es muy irregular; tómalo como referencia."
 
 
 def _elegir_modelo(meses: pd.DataFrame) -> tuple[str, Optional[Precision]]:
@@ -163,7 +169,7 @@ def _elegir_modelo(meses: pd.DataFrame) -> tuple[str, Optional[Precision]]:
         mae=ganador.mae,
         wape=ganador.wape,
         error_total=ganador.error_total,
-        interpretacion=_interpretar(ganador.wape),
+        interpretacion=_interpretar(ganador.wape, ganador.error_total),
         comparacion=comparacion,
     )
 
@@ -232,13 +238,13 @@ def _compra_sugerida(
     """Cuanto comprar para terminar el horizonte sin bajar del minimo, y antes de cuando."""
     necesidad = consumo_total + stock_minimo - stock
     if necesidad <= 0:
-        return CompraSugerida(cantidad=0, fecha_limite=None, motivo="El stock alcanza para todo el horizonte sin bajar del minimo.")
+        return CompraSugerida(cantidad=0, fecha_limite=None, motivo="El stock alcanza para todo el horizonte sin bajar del mínimo.")
     cantidad = math.ceil(necesidad)
     referencia = date.fromisoformat(fecha_alerta) if fecha_alerta else corte + timedelta(days=horizonte)
     limite = max(corte, referencia - timedelta(days=plazo_proveedor))
     motivo = (
-        f"Cubre el consumo esperado del horizonte y mantiene el stock minimo. "
-        f"Pedirlo a mas tardar {plazo_proveedor} dias antes de llegar al minimo (plazo del proveedor)."
+        f"Cubre el consumo esperado del horizonte y mantiene el stock mínimo. "
+        f"Pídelo a más tardar {plazo_proveedor} días antes de llegar al mínimo (plazo del proveedor)."
     )
     return CompraSugerida(cantidad=cantidad, fecha_limite=limite.isoformat(), motivo=motivo)
 
