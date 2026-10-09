@@ -7,6 +7,9 @@ class Settings(BaseSettings):
     API_SECRET_TOKEN: str = "mi-token-secreto-interno-cambiar-en-produccion"
     MIN_DIAS_HISTORIAL: int = 30
     ENVIRONMENT: str = "development"
+    # Vigencia de la prediccion masiva en cache (segundos). Pasado este tiempo
+    # se sigue respondiendo con el ultimo calculo y se recalcula en segundo plano.
+    CACHE_PREDICCIONES_SEGUNDOS: int = 600
 
     class Config:
         env_file = ".env"

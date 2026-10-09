@@ -3,6 +3,8 @@ from fastapi.security import APIKeyHeader
 from fastapi.middleware.cors import CORSMiddleware
 from apscheduler.schedulers.background import BackgroundScheduler
 import logging
+import threading
+import time
 import pandas as pd
 from datetime import date, timedelta
 
@@ -71,7 +73,16 @@ def startup_event():
         minute=0,
         id="reentrenamiento_diario"
     )
+    # Mantener fresca la cache de la prediccion masiva
+    scheduler.add_job(
+        _recalcular_cache,
+        "interval",
+        seconds=settings.CACHE_PREDICCIONES_SEGUNDOS,
+        id="refresco_cache_predicciones"
+    )
     scheduler.start()
+    # Precalcular al arrancar para que la primera consulta no espere
+    _recalcular_cache_en_segundo_plano()
     logger.info("Scheduler iniciado — reentrenamiento diario a las 2 AM")
 
 @app.on_event("shutdown")
@@ -83,13 +94,65 @@ def shutdown_event():
 def health():
     return {"status": "ok", "service": "prediccion-service", "version": "1.0.0"}
 
+# ── Cache de la prediccion masiva ─────────────────────────────────────────────
+# Calcular todos los insumos (Prophet + XGBoost por cada uno) tarda ~20 s.
+# Se guarda el ultimo resultado y se aplica "stale-while-revalidate": se
+# responde al instante con el calculo guardado y, si esta vencido, se
+# recalcula en segundo plano. Se precalcula al arrancar, cada 10 minutos y
+# despues de reentrenar el modelo.
+_cache_lock = threading.Lock()
+_cache_predicciones: dict = {"resultado": None, "calculado_en": 0.0}
+_recalculo_en_curso = threading.Event()
+
+
+def _guardar_en_cache(resultado: "PrediccionMasivaResponse") -> None:
+    with _cache_lock:
+        _cache_predicciones["resultado"] = resultado
+        _cache_predicciones["calculado_en"] = time.monotonic()
+
+
+def _recalcular_cache() -> None:
+    """Recalcula la prediccion masiva y la guarda (una sola vez a la vez)."""
+    if _recalculo_en_curso.is_set():
+        return
+    _recalculo_en_curso.set()
+    try:
+        inicio = time.monotonic()
+        _guardar_en_cache(_calcular_predicciones_todos())
+        logger.info(f"Cache de predicciones actualizada en {time.monotonic() - inicio:.1f} s")
+    except Exception as e:
+        logger.error(f"No se pudo actualizar la cache de predicciones: {e}")
+    finally:
+        _recalculo_en_curso.clear()
+
+
+def _recalcular_cache_en_segundo_plano() -> None:
+    threading.Thread(target=_recalcular_cache, name="recalculo-predicciones", daemon=True).start()
+
+
 # ── Prediccion masiva ─────────────────────────────────────────────────────────
 @app.get("/predict/todos", response_model=PrediccionMasivaResponse)
-def predecir_todos(token: str = Depends(verificar_token)):
+def predecir_todos(refrescar: bool = False, token: str = Depends(verificar_token)):
     """
-    Predice agotamiento para todos los insumos.
-    Filtra solo los que tienen riesgo MEDIO, ALTO o CRITICO.
+    Predice agotamiento para todos los insumos (ordenados por riesgo).
+    Responde desde la cache; con `?refrescar=true` fuerza un calculo nuevo.
     """
+    with _cache_lock:
+        resultado = _cache_predicciones["resultado"]
+        edad = time.monotonic() - _cache_predicciones["calculado_en"]
+
+    if resultado is None or refrescar:
+        resultado = _calcular_predicciones_todos()
+        _guardar_en_cache(resultado)
+        return resultado
+
+    if edad > settings.CACHE_PREDICCIONES_SEGUNDOS:
+        _recalcular_cache_en_segundo_plano()
+    return resultado
+
+
+def _calcular_predicciones_todos() -> PrediccionMasivaResponse:
+    """Calcula Prophet + XGBoost para cada insumo (operacion costosa)."""
     insumos = obtener_todos_los_insumos()
     predicciones = []
     en_riesgo = 0
@@ -265,6 +328,9 @@ def reentrenar_modelo_automatico() -> tuple[bool, int]:
 
     exito = entrenar_modelo(datos_entrenamiento)
     logger.info(f"Reentrenamiento completado — {len(datos_entrenamiento)} registros | exito: {exito}")
+    if exito:
+        # El modelo cambio: las predicciones guardadas ya no son validas.
+        _recalcular_cache_en_segundo_plano()
     return exito, len(datos_entrenamiento)
 
 
