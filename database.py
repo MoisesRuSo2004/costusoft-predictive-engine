@@ -9,8 +9,20 @@ from config import settings
 
 logger = logging.getLogger(__name__)
 
+def _url_con_driver(url: str) -> str:
+    """
+    Fija el driver psycopg2 en la URL.
+    Desde SQLAlchemy 2.1 'postgresql://' usa psycopg (v3) por defecto,
+    y la imagen solo instala psycopg2-binary.
+    """
+    for prefijo in ("postgresql://", "postgres://"):
+        if url.startswith(prefijo):
+            return "postgresql+psycopg2://" + url[len(prefijo):]
+    return url
+
+
 engine = create_engine(
-    settings.DATABASE_URL,
+    _url_con_driver(settings.DATABASE_URL),
     pool_size=5,
     max_overflow=10,
     pool_pre_ping=True,        # reconecta si la conexion murio
