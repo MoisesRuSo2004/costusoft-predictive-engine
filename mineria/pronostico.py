@@ -94,6 +94,9 @@ def _modelo_estacional(meses: pd.DataFrame, cantidad: int) -> pd.DataFrame:
     return pd.DataFrame(filas, columns=["ds", "yhat", "yhat_lower", "yhat_upper"])
 
 
+# Orden de simplicidad para desempatar (menor = mas simple).
+_SIMPLICIDAD = {"promedio_12m": 0, "estacional": 1, "prophet": 2}
+
 MODELOS = {
     "prophet": (_modelo_prophet, "Prophet: tendencia y estacionalidad anual"),
     "promedio_12m": (_modelo_promedio, "Promedio de los últimos 12 meses"),
@@ -161,7 +164,11 @@ def _elegir_modelo(meses: pd.DataFrame) -> tuple[str, Optional[Precision]]:
     if not comparacion:
         return "promedio_12m", None
 
-    comparacion.sort(key=lambda c: c.mae)
+    # Parsimonia: si varios modelos empatan (a menos del 1 % del mejor error),
+    # gana el mas simple, que es mas estable y facil de explicar.
+    mejor = min(c.mae for c in comparacion)
+    tolerancia = max(0.01, mejor * 0.01)
+    comparacion.sort(key=lambda c: (c.mae > mejor + tolerancia, _SIMPLICIDAD[c.modelo], c.mae))
     ganador = comparacion[0]
     return ganador.modelo, Precision(
         meses_evaluados=MESES_BACKTEST,
@@ -259,7 +266,8 @@ def _agrupar(df: pd.DataFrame, columnas: dict[str, str], agrupacion: str, suma: 
     serie = serie.resample(_FRECUENCIA[agrupacion]).sum() if suma else serie.resample(_FRECUENCIA[agrupacion]).last()
     puntos = []
     for fecha, fila in serie.iterrows():
-        datos = {destino: round(float(fila[origen]), 2) for origen, destino in columnas.items()}
+        # 4 decimales: sumar la serie diaria reproduce el total informado.
+        datos = {destino: round(float(fila[origen]), 4) for origen, destino in columnas.items()}
         puntos.append(PuntoSerie(fecha=fecha.strftime("%Y-%m-%d"), **datos))
     return puntos
 

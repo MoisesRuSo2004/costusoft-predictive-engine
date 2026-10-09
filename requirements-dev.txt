@@ -1,0 +1,3 @@
+# Solo para desarrollo (no va en la imagen de Docker).
+-r requirements.txt
+pytest==8.3.5

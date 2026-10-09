@@ -58,3 +58,12 @@
 ---
 
 [cite_start]© 2026 CostuSoft - Módulo de Inteligencia Artificial Confidencial[cite: 172].
+
+## 🧪 Pruebas
+
+Pruebas del módulo de minería de datos (datos sintéticos, no usan la base de datos):
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
